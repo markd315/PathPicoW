@@ -10,6 +10,7 @@ led = Pin("LED", Pin.OUT)
 next_train_time = -99 # TODO use this as a global somehow?
 
 def led_flash_logic(minutes):
+    # occasional short blink is a pre-alert, don't leave yet.
     # 10-9 is casual blink
     # 9-830 is picking up
     # 830-8 is fast
@@ -54,7 +55,6 @@ async def async_http():
 async def await_http(task):
     print("awaiting previously made request")
     complete = await task
-    #utime.sleep_ms(20) # for processing to take place
     while True: # loop in case response processing incomplete
         try:
             return complete.json()
@@ -63,22 +63,12 @@ async def await_http(task):
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    led.value(0)
-    # A simple example that:
-    # - Connects to a WiFi Network defined by "ssid" and "password"
-    # - Performs a GET request (loads a webpage)
-    # - Queries the current time from a server
-
-    # Connect to network
+    led.value(0)    # Connect to network
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
 
-    # Fill in your network name (ssid) and password here:
     wlan.connect(secrets.ssid, secrets.passw)
 
-    # Example 1. Make a GET request for google.com and print HTML
-    # Print the html content from google.com
-    #second_thread = _thread.start_new_thread(manage_light, ())
     task = None
     print("Querying PATH API:")
     r = urequests.get("https://path.api.razza.dev/v1/stations/hoboken/realtime").json()    
