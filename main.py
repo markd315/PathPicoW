@@ -6,7 +6,7 @@ import uasyncio
 import secrets
 
 led = Pin("LED", Pin.OUT)
-
+url = "https://citymapper.com/api/2/metrodepartures?headways=1&ids=SubwayMontroseAv&region_id=us-nyc"
 next_train_time = -99 # TODO use this as a global somehow?
 
 def led_flash_logic(minutes):
@@ -47,10 +47,10 @@ def strobe_light(ms_interval, off_interval):
         else:
             led.value(1)
             utime.sleep_ms(ms_interval)
-    led.value(1)
+    led.value(1) if ms_interval >= off_interval else led.value(0) 
 
 async def async_http():
-    return urequests.get("https://path.api.razza.dev/v1/stations/hoboken/realtime")
+    return urequests.get(url)
 
 async def await_http(task):
     print("awaiting previously made request")
@@ -70,24 +70,23 @@ if __name__ == '__main__':
     wlan.connect(secrets.ssid, secrets.passw)
 
     task = None
-    print("Querying PATH API:")
-    r = urequests.get("https://path.api.razza.dev/v1/stations/hoboken/realtime").json()    
+    print("Querying API:")
+    r = urequests.get(url).json()    
     while True:
         if task is not None:
             r = uasyncio.run(await_http(task))
-        print("Querying PATH API:")
+        print("Querying API:")
         task = uasyncio.create_task(async_http())
         waited = False
-        print(r)
-        for train in r['upcomingTrains']:
-            if '33rd Street' in train['lineName']:
-                arr = parse_train_arrival(train['projectedArrival'])
-                now = utime.time()
-                diff_min = float(arr - now) / 60.0 - 300 #tz and secs to mins
-                #diff_min -=8 # TODO REMOVE TESTING
-                diff_min -= 0.1 # to account for the blink cycle duration
-                next_train_time = diff_min # set global
-                print(str(diff_min) + " mins til a train")
+        #print(r)
+        r = r['stations'][0]['sections'][0]['departure_groupings'][1] # not sure about this 1 at the end
+        #print(r)
+        for train in r['departures']:
+            if '8 Av' in train['destination_name']:
+                print(train)
+                next_train_time = float(train['time_seconds'])/60.0
+                next_train_time -= 0.1
+                print(str(next_train_time) + " mins til a train")
                 if next_train_time > 15.5 or next_train_time < 7.5:
                     led.value(0)
                     continue # Not a relevant train arrival yet/anymore
