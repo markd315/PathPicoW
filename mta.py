@@ -3,6 +3,7 @@ import ntptime
 from machine import Pin, I2C, PWM
 import network  # handles connecting to WiFi
 import urequests  # handles making and servicing network requests
+import uasyncio
 import os
 import secrets
 time.sleep(4)
@@ -41,18 +42,18 @@ def led_flash_logic(train, minutes):
         pin=3
         base_trip = 2.5
     if(minutes > base_trip+4 or minutes < base_trip):
-        led_sel = Pin(pin, Pin.OUT)
-        led_sel.value(0)
+        pwm_sel.freq(80000)
+        pwm_sel.duty_u16(0) # off
         return False
     elif(minutes < base_trip+4 and minutes > base_trip+2):
-        led_sel = Pin(pin, Pin.OUT)
-        led_sel.value(1)
+        pwm_sel.freq(80000)
+        pwm_sel.duty_u16(64768) # on
     elif(minutes > base_trip+1):
-        pwm_sel = PWM(Pin(pin))
-        strobe_light(pwm_sel, 8)
+        pwm_sel.freq(8)
+        pwm_sel.duty_u16(52768)
     else: #(minutes > base_trip)
-        pwm_sel = PWM(Pin(pin))
-        strobe_light(pwm_sel, 20)
+        pwm_sel.freq(8)
+        pwm_sel.duty_u16(2768)
     return True
 
 def strobe_light(pwm_sel, freq):
@@ -131,27 +132,27 @@ if __name__ == '__main__':
         "L": "SubwayDeKalbAvL"
     }
     while True:
-        j_list = []
-        for bullet in list(trains.keys()):
-            #print("Querying Subway API:")
-            try:
+        try:
+            j_list = []
+            for bullet in list(trains.keys()):
+                #print("Querying Subway API:")
                 r = http(trains[bullet])
-            except:
+                led.value(0)
+                set_light = False
+                for s in r['stations'][0]['sections']:
+                    for grp in s['departure_groupings']:
+                        for data in grp['departures']:
+                            if not is_to_manhattan(data, bullet):
+                                continue
+                            diff_min = float(data['time_seconds']) / 60.0
+                            if J_within_M_window(bullet, diff_min, j_list):
+                                continue
+                            if set_light:
+                                break
+                            print(str(diff_min) + " mins " + bullet + " train")
+                            set_light = led_flash_logic(bullet, diff_min)
+            # Only check times every 10 seconds
+            time.sleep(10)
+        except:
                 continue
                 pass
-            led.value(0)
-            set_light = False
-            for s in r['stations'][0]['sections']:
-                for grp in s['departure_groupings']:
-                    for data in grp['departures']:
-                        if not is_to_manhattan(data, bullet):
-                            continue
-                        diff_min = float(data['time_seconds']) / 60.0
-                        if J_within_M_window(bullet, diff_min, j_list):
-                            continue
-                        if set_light:
-                            break
-                        print(str(diff_min) + " mins " + bullet + " train")
-                        set_light = led_flash_logic(bullet, diff_min)
-        # Only check times every 10 seconds
-        time.sleep(10)
