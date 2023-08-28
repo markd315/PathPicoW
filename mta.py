@@ -41,6 +41,7 @@ def led_flash_logic(train, minutes):
     else: # J/Z
         pin=3
         base_trip = 2.5
+    pwm_sel = PWM(Pin(pin, Pin.OUT))
     if(minutes > base_trip+4 or minutes < base_trip):
         pwm_sel.freq(80000)
         pwm_sel.duty_u16(0) # off
@@ -108,7 +109,7 @@ if __name__ == '__main__':
         try:
             wlan = network.WLAN(network.STA_IF)
             wlan.active(True)
-            wlan.connect(secrets.ssid, secrets.passw)
+            wlan.connect(secrets.new_ssid, secrets.new_passw)
             connected = True
         except:
             pass
@@ -127,32 +128,35 @@ if __name__ == '__main__':
             pass
     print(time.localtime())
     trains = {
+        "L": "SubwayDeKalbAvL",
         "J": "SubwayKosciuskoSt",
-        "M": "SubwayCentralAv",
-        "L": "SubwayDeKalbAvL"
+        "M": "SubwayCentralAv"
     }
     while True:
-        try:
-            j_list = []
-            for bullet in list(trains.keys()):
-                #print("Querying Subway API:")
-                r = http(trains[bullet])
+        j_list = []
+        for bullet, station in trains.items():
+            try:
+                print("Querying Subway API: " + bullet + " " + station)
+                r = http(station)
                 led.value(0)
-                set_light = False
+                set_light = ""
                 for s in r['stations'][0]['sections']:
                     for grp in s['departure_groupings']:
                         for data in grp['departures']:
+                            #print(data)
+                            if set_light == bullet:
+                                continue
                             if not is_to_manhattan(data, bullet):
                                 continue
                             diff_min = float(data['time_seconds']) / 60.0
                             if J_within_M_window(bullet, diff_min, j_list):
                                 continue
-                            if set_light:
-                                break
                             print(str(diff_min) + " mins " + bullet + " train")
-                            set_light = led_flash_logic(bullet, diff_min)
-            # Only check times every 10 seconds
-            time.sleep(10)
-        except:
-                continue
-                pass
+                            set_light_bool = led_flash_logic(bullet, diff_min)
+                            if set_light_bool:
+                                set_light = bullet
+            except Exception as e:
+                    print(e)
+                    continue
+                    pass
+        time.sleep(10)
