@@ -15,32 +15,45 @@ os.dupterm(logfile)
 
 led = Pin("LED", Pin.OUT)
 
-#led_r.value(1)
-#led_y.value(1)
-
 next_train_time = -99 # TODO use this as a global somehow?
 
 led.value(1)
 
-def l_train_bike_result():
+def bike_result():
     #req
-    #https://citymapper.com/api/3/nearby?brand_ids=CitiBike&location=40.695473,-73.926774&region_id=us-nyc&mode_id=us-nyc-citibike&limit=50&extended=1
-    # TODO check the bushwick/dekalb for >2 bikes
-    #CitiBike_a3d72b5b-9587-4f33-9722-c01e20a9b358
-    # TODO check the stanhope/wykoff for >3 docks
-    #CitiBike_f6cf3ecc-b3ad-4291-8c24-277f28f64ba1
-    return True
+    location = "40.701111,-73.906958"
+    decoded = 'https://citymapper.com/api/3/nearby?brand_ids=CitiBike&location=' + location
+    decoded += '&region_id=us-nyc&mode_id=us-nyc-citibike&limit=50&extended=1'
+    r_t = urequests.get(decoded)
+    for s in r_t.json()['elements']:
+        if (s['id'] == 'correct'): # todo
+            print(s)
+            return s['cycles_manual_available'] > 0
+            # also has _electric_available and cycles_available
+    return False
+
+def bikes_logic():
+    pin=19
+    base_trip = 4
+    pwm_sel = PWM(Pin(pin, Pin.OUT))
+    if(bike_result()):
+        pwm_sel.freq(80000)
+        pwm_sel.duty_u16(64768) # on
+        return True
+    else:
+        pwm_sel.freq(80000)
+        pwm_sel.duty_u16(0) # off
+        return False
 
 def led_flash_logic(train, minutes):
-    if(train == "L" and l_train_bike_result()):
-        pin=19
-        base_trip = 8
+    if(train == "L"):
+        pin=3
+        base_trip = 3
     elif(train == "M"):
         pin=12
-        base_trip = 5
-    else: # J/Z
-        pin=3
-        base_trip = 2.5
+        base_trip = 1.5
+    else: # nothing else implemented
+        return
     pwm_sel = PWM(Pin(pin, Pin.OUT))
     if(minutes > base_trip+4 or minutes < base_trip):
         pwm_sel.freq(80000)
@@ -49,10 +62,10 @@ def led_flash_logic(train, minutes):
     elif(minutes < base_trip+4 and minutes > base_trip+2):
         pwm_sel.freq(80000)
         pwm_sel.duty_u16(64768) # on
-    elif(minutes > base_trip+1):
+    elif(minutes > base_trip+1): # slow blink
         pwm_sel.freq(8)
         pwm_sel.duty_u16(52768)
-    else: #(minutes > base_trip)
+    else: #(minutes > base_trip) # faint blink
         pwm_sel.freq(8)
         pwm_sel.duty_u16(2768)
     return True
@@ -79,28 +92,9 @@ def is_to_manhattan(data, bullet):
     did = data['direction_id']
     if bullet == 'M':
         return did == '1'
-    elif bullet == 'L':
+    else: # bullet == 'L':
         return did == '0'
-    else:
-        JZdests = [
-        'Broad St','Canal St',
-        'Delancey St-Essex St''Marcy Av',
-        'Bowery','Chambers St','Fulton St'
-        ]
-        return data['destination_name'] in JZdests
 
-def J_within_M_window(bullet, diff_min, j_list):
-    if bullet == 'J':
-        j_list.append(diff_min)
-    if bullet == 'M':
-        hour = time.gmtime()[3]
-        print("hour " + str(hour))
-        j_preference_mins = 4.5 if hour > 7 and hour < 13 else 2.5
-        for j in j_list:
-            if diff_min + j_preference_mins > j:
-                print("Ignoring an M train because there is an J just behind it")
-                return True
-    return False
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
@@ -128,15 +122,13 @@ if __name__ == '__main__':
             pass
     print(time.localtime())
     trains = {
-        "L": "SubwayDeKalbAvL",
-        "J": "SubwayKosciuskoSt",
-        "M": "SubwayCentralAv"
+        "L": "SubwayMyrtleWyckoffAvs",
+        "M": "SubwaySenecaAv"
     }
     while True:
-        j_list = []
         for bullet, station in trains.items():
             try:
-                print("Querying Subway API: " + bullet + " " + station)
+                #print("Querying Subway API: " + bullet + " " + station)
                 r = http(station)
                 led.value(0)
                 set_light = ""
@@ -149,12 +141,12 @@ if __name__ == '__main__':
                             if not is_to_manhattan(data, bullet):
                                 continue
                             diff_min = float(data['time_seconds']) / 60.0
-                            if J_within_M_window(bullet, diff_min, j_list):
-                                continue
                             print(str(diff_min) + " mins " + bullet + " train")
                             set_light_bool = led_flash_logic(bullet, diff_min)
                             if set_light_bool:
                                 set_light = bullet
+                # bikes trigger
+                bikes_logic()
             except Exception as e:
                     print(e)
                     continue

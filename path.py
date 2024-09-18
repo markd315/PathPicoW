@@ -89,7 +89,7 @@ if __name__ == '__main__':
         try:
             r = http()
             led.value(0)
-            print(r)
+            #print(r)
             for train in r['upcomingTrains']:
                 if '33rd Street' in train['lineName']:
                     arr = parse_train_arrival(train['projectedArrival'])
